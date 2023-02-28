@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
 	<meta charset="UTF-8">
-	<meta http-equiv="refresh" content="1000"/>
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>SPH Sandbox</title>
@@ -78,30 +77,33 @@
 				<button id="force-button">
 					New body force 
 				</button>
-				<button id="p-outflow-button">
-				</button>
+				<button id="rect-spawn-button">
+					New particles 
+				</button>				
 				<button id="wall-button">
 					New wall 
 				</button>
 				<button id="RB-button">
 					New rigid body
 				</button>	
-				<button id="rect-spawn-button">
-					New particles (rectangle) 
-				</button>	
-				<button id="disc-spawn-button">
-					New particles (circle) 
-				</button>	
-				</div>
+			</div>
 	
-				<div class="parameters-panel">
+			<div class="parameters-panel">
 				<input type="color" 
 					   class="color" 
 					   id="color-picker">
 				<div class="label">Radius</div>
-				<div class="label">0</div>
-				<input type="range" class="slider-radius"
+				<div class="label" id="radius-label">0</div>
+				<input type="range" class="slider-radius" id="slider-radius"
 					min="5" max="50" value="20">
+			</div>
+
+			<div class="select-panel">
+				<button id="delete-button">
+					delete
+				</button>						
+				<select name="Component" id="component-dropdown">
+				</select>
 			</div>
 		</div>
 

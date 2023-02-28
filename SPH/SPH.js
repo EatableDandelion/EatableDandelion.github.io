@@ -35,10 +35,8 @@ class Particle
 
 class RigidBody
 {
-	constructor(particles)
+	constructor()
 	{
-		this.particles = particles;
-
 		this.x = 0;
 		this.y = 0;
 		this.I = 0;
@@ -51,7 +49,6 @@ class RigidBody
 		this.fy = 0;
 		this.fz = 0;
 
-		this.init();
 	}
 
 	init()
@@ -124,6 +121,23 @@ class RigidBody
 		});	
 		
 	}
+
+	setParticles(particles)
+	{
+		this.particles = particles;
+		this.x = 0;
+		this.y = 0;
+		this.I = 0;
+		this.theta = 0;
+		this.m = 0;
+		this.vx = 0;
+		this.vy = 0;
+		this.vz = 0;
+		this.fx = 0;
+		this.fy = 0;
+		this.fz = 0;
+		this.init();
+	}
 }
 
 class ParticleSystem
@@ -142,6 +156,7 @@ class ParticleSystem
 		this.nbParticles = 0;
 		this.nu = 0.0;
 		this.bcs = [];
+		this.bcIds = 0;
 		this.alpha = 10;
 		this.beta = 2*this.alpha;
 		this.mu = 1;
@@ -393,6 +408,7 @@ class ParticleSystem
 	
 	addBC(bc)
 	{
+		bc.id = this.bcIds++;
 		this.bcs.push(bc);
 	}
 
@@ -431,6 +447,11 @@ class ParticleSystem
 
 class BC
 {
+	constructor()
+	{
+		this.id = 0;
+	}
+
 	update(particleSystem, dt)
 	{}
 
@@ -441,11 +462,11 @@ class BC
 
 class Inflow extends BC
 {
-	constructor(flowRate, u0, x0,y0, x1,y1, UI, pColor)
+	constructor(h, flowRate, u0, x0,y0, x1,y1, UI, color)
 	{
 		super();
 
-		this.pColor = pColor;
+		this.pColor = color;
 		this.center = new Vector((x0+x1)*0.5, (y0+y1)*0.5);
 		this.width = Math.sqrt((x0-x1)*(x0-x1)+(y0-y1)*(y0-y1));
 
@@ -461,6 +482,7 @@ class Inflow extends BC
 		UI.addComponent(this.arrow);	
 
 		this.rect.point0.listeners.push(this.arrow.point0);
+		this.h = h;
 	}
 
 	update(particles, dt)
@@ -480,7 +502,7 @@ class Inflow extends BC
 			let x = this.center.x + l*Math.cos(this.rect.theta);
 			let y = this.center.y + l*Math.sin(this.rect.theta);
 
-			particles.addParticle(x, y, 20, 1, u, v, this.pColor, false);	
+			particles.addParticle(x, y,this.h, 1, u, v, this.pColor, false);	
 		}
 	}
 	
@@ -598,14 +620,14 @@ class BodyForce extends BC
 
 class RectangleSpawn extends BC
 {
-	constructor(x0,y0, UI)
+	constructor(h, x0,y0, color, UI)
 	{
 		super();
 
 		let width = 200;
 		this.spent = false;
-		this.h = 20;
-		this.color = "black";
+		this.h = h;
+		this.color = color;
 
 		this.center = new Vector(x0, y0);
 
@@ -659,13 +681,13 @@ class RectangleSpawn extends BC
 
 class Wall extends BC
 {
-	constructor(UI)
+	constructor(h, UI)
 	{
 		super();
 
 		this.line = new BezierInteractable();
 		UI.addComponent(this.line);
-		this.h = 25;
+		this.h = h;
 		this.particles = [];
 		this.first = true;
 	}
@@ -696,16 +718,17 @@ class Wall extends BC
 
 class RigidBodySpawn extends BC
 {
-	constructor(UI)
+	constructor(h, UI, particleSystem)
 	{
 		super();
 
 		this.line = new BezierInteractable();
 		UI.addComponent(this.line);
 		this.spent = false;
-		this.h = 25;
+		this.h = h;
 		this.particles = [];
-		this.body = null;
+		this.body = new RigidBody();
+		particleSystem.rigidBodies.push(this.body);
 	}
 
 	update(particles, dt)
@@ -724,15 +747,17 @@ class RigidBodySpawn extends BC
 			});
 
 			this.line.wasChanged = false;
-
-			this.body = new RigidBody(this.particles);
-
-			particles.rigidBodies.push(this.body);
+			this.body.setParticles(this.particles)
 		}		
 	}
 
 	reset()
 	{
+		this.particles.forEach(p => 
+		{
+			p.markedForDeletion = true;
+		});
+
 		this.spent = false;
 	}
 }

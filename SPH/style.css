@@ -77,7 +77,7 @@ button:hover
 .left-panel
 {
 	display:				grid;
-	grid-template-rows:		200px 320px 200px;
+	grid-template-rows:		200px 320px 100px 100px;
 }
 
 .add-elements-div
@@ -94,6 +94,14 @@ button:hover
 	display:				grid;
 	grid-template-columns:	1fr 4fr;
 	height:					50px;
+}
+
+.select-panel
+{
+	display:				grid;
+	grid-template-columns:	1fr 1fr;
+	height:					20px;
+	column-gap:				5px;
 }
 
 .top-div

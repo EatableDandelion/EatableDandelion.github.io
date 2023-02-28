@@ -30,7 +30,8 @@ window.addEventListener('load', function(){
 	}
 
 	let game = new Game(canvas.width, canvas.height, ctx, canvas);
-	let h = 20;
+	let h = document.getElementById("slider-radius").value;
+	let color = document.getElementById("color-picker").value;
 	ctx.lineWidth = 5;
 	let dtFactor = 1;
 
@@ -100,7 +101,6 @@ window.addEventListener('load', function(){
 	
 
 	
-		
 		document.getElementById("dt-slider").innerHTML = dtFactor;
 		document.getElementById("dt-label").innerHTML = dtFactor;
 		document.getElementById("dt-slider")
@@ -187,10 +187,12 @@ window.addEventListener('load', function(){
 		document.getElementById("inflow-button")
 				.addEventListener("click", function()
 		{
-			game.particles.addBC(new Inflow(2,0.1,
+			game.particles.addBC(new Inflow(h, 2,0.1,
 								canvas.width*0.5, canvas.height*0.45,
 								canvas.width*0.5, canvas.height*0.65, 
-								game.UI, "black"));
+								game.UI, color));
+
+			addToBCDropDown("Input");
 		});	
 
 		document.getElementById("outflow-button")
@@ -200,6 +202,7 @@ window.addEventListener('load', function(){
 								canvas.width*0.5, canvas.height*0.45,
 								canvas.width*0.5, canvas.height*0.65, 
 								game.UI));
+			addToBCDropDown("Outflow");
 		});
 
 		document.getElementById("force-button")
@@ -209,26 +212,56 @@ window.addEventListener('load', function(){
 								canvas.width*0.5, canvas.height*0.45,
 								canvas.width*0.5, canvas.height*0.65, 
 								game.UI));
+			addToBCDropDown("Body force");
 		});
 
 		document.getElementById("wall-button")
 				.addEventListener("click", function()
 		{
-			game.particles.addBC(new Wall(game.UI));
+			game.particles.addBC(new Wall(h, game.UI));
+			addToBCDropDown("Wall");
 		});
 
 		document.getElementById("RB-button")
 				.addEventListener("click", function()
 		{
-			game.particles.addBC(new RigidBodySpawn(game.UI));
+			game.particles.addBC(new RigidBodySpawn(h, game.UI, 
+													game.particles));
+			addToBCDropDown("Rigid body");
 		});
 
 		document.getElementById("rect-spawn-button")
 				.addEventListener("click", function()
 		{
-			game.particles.addBC(new RectangleSpawn(
+			game.particles.addBC(new RectangleSpawn(h,
 								canvas.width*0.5, canvas.height*0.45,
-								game.UI));
+								color, game.UI));
+			addToBCDropDown("Spawn");
 		});
+		
+		
+		document.getElementById("slider-radius")
+				.addEventListener("change", function()
+		{
+			h = document.getElementById("slider-radius").value;
+			document.getElementById("radius-label").innerHTML = h;
+		});
+
+		document.getElementById("color-picker")
+				.addEventListener("change", function()
+		{
+			color = document.getElementById("color-picker").value;
+		});
+	}
+
+	function addToBCDropDown(name)
+	{
+		let id = game.particles.bcIds-1;
+		let dropDown = document.getElementById("component-dropdown");
+		let newElement = document.createElement("option");
+		newElement.setAttribute("value",id);
+		newElement.setAttribute("selected","true");
+		newElement.appendChild(document.createTextNode(name+" "+id));
+		dropDown.appendChild(newElement);
 	}
 });

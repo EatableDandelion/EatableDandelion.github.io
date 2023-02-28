@@ -472,8 +472,8 @@ class BezierInteractable extends Interactable
 			let l = this.getBezierLength(i, 5);
 			let nb = Math.round(l/(spacingRatio*h))+1;
 			let dt = 1.0/(nb-1);
-			let t = 0;
-			for(let j = 0; j<nb; j++)
+			let t = dt;
+			for(let j = 0; j<nb-1; j++)
 			{
 				let pos = this.getPosition(this.nodes[i].position,
 								 		   this.nodes[i+1].position,
