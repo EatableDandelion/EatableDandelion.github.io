@@ -197,9 +197,10 @@ class ParticleSystem
 			}
 		}
 
-		this.particles.forEach(particle => 
+		this.particles.filter(particle => particle.isGhost)
+					  .forEach(particle => 
 		{
-			this.enforceBCs(particle, dt);		
+			this.enforceGhostBCs(particle, dt);
 		});
 
 		let E = 0;
@@ -224,6 +225,7 @@ class ParticleSystem
 
 			E += 0.5*(particle.vx*particle.vx+particle.vy*particle.vy);
 
+			this.enforceBCs(particle, dt);		
 		});
 
 
@@ -320,8 +322,7 @@ class ParticleSystem
 		return 0.0;
 	}
 
-
-	enforceBCs(particle, dt)
+	enforceGhostBCs(particle, dt)
 	{
 		let restitution = 1.0;
 		
@@ -344,6 +345,33 @@ class ParticleSystem
 		{
 			particle.fy_old = 0;
 			particle.fy = Math.max(0,-2*particle.vy*restitution/dt);
+		}
+	}
+
+
+	enforceBCs(particle, dt)
+	{
+		let restitution = 1.0;
+		
+		if(particle.x > this.width - particle.h)
+		{
+			particle.vx *= -restitution;
+			particle.x = 2*(this.width - particle.h) - particle.x;
+		}
+		else if(particle.x < particle.h)
+		{
+			particle.vx *= -restitution;
+			particle.x = -particle.x + 2*particle.h;
+		}
+		if(particle.y > this.height - particle.h)
+		{
+			particle.vy *= -restitution;
+			particle.y = 2*(this.height - particle.h) - particle.y;
+		}
+		else if(particle.y < particle.h)
+		{
+			particle.vy *= -restitution;
+			particle.y = -particle.y + 2*particle.h;
 		}
 	}
 
