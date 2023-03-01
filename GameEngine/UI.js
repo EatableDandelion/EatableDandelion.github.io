@@ -44,6 +44,10 @@ class UI
 
 	draw(context)
 	{
+		this.components = 
+			this.components.filter(c => !c.markedForDeletion);
+
+
 		if(!this.visible)return;
 		this.components.forEach(component => {component.draw(context);});
 	}
@@ -95,6 +99,7 @@ class Interactable
 	constructor(collider)
 	{
 		this.collider = collider;
+		this.markedForRemoval = false;
 	}
 
 	isMouseOver(mouseCollider)
@@ -121,6 +126,9 @@ class Interactable
 	{
 		return false;
 	}
+
+	remove()
+	{};
 }
 
 class Draggable extends Interactable
@@ -272,6 +280,13 @@ class ArrowInteractable extends Interactable
 	{
 		return this.point1.position.y - this.point0.position.y;
 	}
+
+	remove()
+	{
+		this.markedForDeletion = true;
+		this.point0 = [];
+		this.point1 = [];
+	}
 }
 
 class RectangleInteractable extends Interactable
@@ -386,6 +401,14 @@ class RectangleInteractable extends Interactable
 	{
 		let p02 = this.point2.position.subtract(this.point0.position);
 		return p02.length();
+	}
+
+	remove()
+	{
+		this.markedForDeletion = true;
+		this.point0 = [];
+		this.point1 = [];
+		this.point2 = [];
 	}
 }
 
@@ -519,6 +542,12 @@ class BezierInteractable extends Interactable
 		return ((p0.multiply((1-t)*(1-t))).add(c.multiply(2*t*(1-t))))
 				.add(p1.multiply(t*t));
 	}
+
+	remove()
+	{
+		this.markedForDeletion = true;
+		this.nodes = [];
+	}
 }
 
 
@@ -577,5 +606,12 @@ class CircleInteractable extends Interactable
 	setParameters()
 	{
 		this.radius = this.point0.position.distance(this.point1.position);
+	}
+
+	remove()
+	{
+		this.markedForDeletion = true;
+		this.point0 = [];
+		this.point1 = [];
 	}
 }

@@ -5,8 +5,7 @@ class Particle
 		this.x = x;
 		this.y = y;
 		this.h = h;
-//		this.m = h*h/4000*m;
-		this.m = 0.01;
+		this.m = h*h/4000*m;
 		this.rho = 0;
 		this.P = 0;
 		this.vx = vx;
@@ -149,8 +148,9 @@ class ParticleSystem
 		this.width = width;
 		this.height = height;
 		this.gravityToggle = 0;
-		this.selfGravityToggle = 1;
+		this.selfGravityToggle = 0;
 		this.viscosityToggle = 1;
+		this.cs = 0.2; //speed of sound
 		this.g = 0;
 		this.selfG = 1.2;
 		this.nbParticles = 0;
@@ -160,19 +160,27 @@ class ParticleSystem
 		this.alpha = 10;
 		this.beta = 2*this.alpha;
 		this.mu = 1;
+		this.grid = new Grid(30, 18, 0, 0, width, height);
+		this.particleVisible = false;
+		this.resultDisplay = "";
 	}
 
 	update(dt)
 	{
+		this.particles = 
+			this.particles.filter(particle => !particle.markedForDeletion);
+
+		this.bcs = 
+			this.bcs.filter(bc => !bc.markedForDeletion);
+
 		this.bcs.forEach(bc =>
 		{
 			bc.update(this, dt);
 		});
 
-		this.particles = 
-			this.particles.filter(particle => !particle.markedForDeletion);
 
-
+		this.grid.clearGrid();
+		this.particles.forEach(particle => this.grid.add(particle));
 
 		this.setDensity();
 
@@ -180,9 +188,12 @@ class ParticleSystem
 		for(let i = 0; i<n; i++)
 		{
 			let pi = this.particles[i];
-			for(let j = i+1; j<n; j++)
+			let neighbors = this.grid.getNeighbors(pi);
+
+			for(let j = 0; j<neighbors.length; j++)
 			{
-				let pj = this.particles[j];
+				let pj = neighbors[j];
+				if(pj.id <= pi.id) continue;
 
 				let dx = pi.x - pj.x;
 				let dy = pi.y - pj.y;
@@ -199,7 +210,6 @@ class ParticleSystem
 					stress += this.getViscosity(pi, pj, r, dx, dy);
 
 				stress *= dW;
-				stress += this.selfG / (r*r) * this.selfGravityToggle;
 
 				pi.fx += -pj.m * stress * dx;
 				pi.fy += -pj.m * stress * dy;
@@ -211,6 +221,31 @@ class ParticleSystem
 
 			}
 		}
+
+		if(this.selfGravityToggle == 1)
+		{
+			for(let i = 0; i<n; i++)
+			{
+				let pi = this.particles[i];
+	
+				for(let j = i+1; j<this.particles.length; j++)
+				{
+					let pj = this.particles[j];
+
+					let dx = pi.x - pj.x;
+					let dy = pi.y - pj.y;
+					let r = Math.sqrt(dx*dx + dy*dy);
+					dx /= r;
+					dy /= r;
+
+					pi.fx += -pj.m * this.selfG / (r*r) * dx;
+					pi.fy += -pj.m * this.selfG / (r*r) * dy;
+					pj.fx -= -pi.m * this.selfG / (r*r) * dx;
+					pj.fy -= -pi.m * this.selfG / (r*r) * dy;
+				}
+			}
+		}
+
 
 		this.particles.filter(particle => particle.isGhost)
 					  .forEach(particle => 
@@ -241,6 +276,8 @@ class ParticleSystem
 			E += 0.5*(particle.vx*particle.vx+particle.vy*particle.vy);
 
 			this.enforceBCs(particle, dt);		
+
+
 		});
 
 
@@ -258,9 +295,13 @@ class ParticleSystem
 		{
 			let pi = this.particles[i];
 			pi.rho = pi.m * this.W(0, pi.h);
-			for(let j = i+1; j<n; j++)
+
+			let neighbors = this.grid.getNeighbors(pi);
+
+			for(let j = 0; j<neighbors.length; j++)
 			{
-				let pj = this.particles[j];
+				let pj = neighbors[j];
+				if(pj.id <= pi.id) continue;
 
 				let dx = pi.x - pj.x;
 				let dy = pi.y - pj.y;
@@ -271,7 +312,7 @@ class ParticleSystem
 				pi.rho += rho_ij;
 				pj.rho += rho_ij;			
 			}
-			pi.P = 0.4*pi.rho;
+			pi.P = (this.cs)*(this.cs)*(pi.rho);
 		}
 	}
 
@@ -292,8 +333,6 @@ class ParticleSystem
 		let cs = (p1.P+p2.P)/(p1.rho+p2.rho);
 
 		return (-this.alpha*cs*mu + this.beta*mu*mu)*2.0/(p1.rho+p2.rho);
-	
-
 	}
 
 	getViscosity(p1, p2, r, dx, dy)
@@ -398,12 +437,19 @@ class ParticleSystem
 		return particle;
 	}
 
-	draw(context)
+	draw(context, paused)
 	{
-		this.particles.forEach(particle =>
+		if(this.resultDisplay != "")
+			this.grid.draw(context, this.resultDisplay);
+
+		if(this.particleVisible)
 		{
-			particle.draw(context);
-		});
+			this.particles.forEach(particle =>
+			{
+				particle.draw(context);
+			});
+		}
+	
 	}
 	
 	addBC(bc)
@@ -412,8 +458,15 @@ class ParticleSystem
 		this.bcs.push(bc);
 	}
 
+	getBC(id)
+	{
+		return this.bcs.filter(bc => bc.id == id)[0];
+	}
+
 	reset()
 	{
+		this.grid.reset();
+
 		this.particles = this.particles
 							 .filter(particle => particle.isGhost);
 
@@ -442,6 +495,11 @@ class ParticleSystem
 	{
 		this.mu = mu;
 	}
+
+	setSpeedOfSound(cs)
+	{
+		this.cs = cs;
+	}
 }
 
 
@@ -450,6 +508,7 @@ class BC
 	constructor()
 	{
 		this.id = 0;
+		this.markedForDeletion = false;
 	}
 
 	update(particleSystem, dt)
@@ -457,12 +516,15 @@ class BC
 
 	reset()
 	{}
+
+	remove()
+	{}
 }
 
 
 class Inflow extends BC
 {
-	constructor(h, flowRate, u0, x0,y0, x1,y1, UI, color)
+	constructor(h, x0,y0, x1,y1, UI, color)
 	{
 		super();
 
@@ -471,11 +533,11 @@ class Inflow extends BC
 		this.width = Math.sqrt((x0-x1)*(x0-x1)+(y0-y1)*(y0-y1));
 
 		this.arrow = new ArrowInteractable(this.center,
-						  	this.center.add(new Vector(u0*1000,0)), 20);
+						  	this.center.add(new Vector(200,0)), 20);
 
 		this.rect = new RectangleInteractable(this.center,
 											  this.width,
-				 							  flowRate*10, 
+				 							  100, 
 											  Math.PI/2);
 	
 		UI.addComponent(this.rect);		
@@ -487,14 +549,14 @@ class Inflow extends BC
 
 	update(particles, dt)
 	{
-		let n = this.rect.height/10*dt/1000.0;
+		let n = this.rect.height*2*dt/1000.0;
 		if(n < 1)
 		{
 			if(Math.random() < n) n = 1;
 		}
 	
-		let u = this.arrow.getDx()/1000;
-		let v = this.arrow.getDy()/1000;
+		let u = this.arrow.getDx()/300;
+		let v = this.arrow.getDy()/300;
 
 		for(let i = 0; i<Math.round(n); i++)
 		{
@@ -505,7 +567,12 @@ class Inflow extends BC
 			particles.addParticle(x, y,this.h, 1, u, v, this.pColor, false);	
 		}
 	}
-	
+
+	remove()
+	{
+		this.rect.remove();	
+		this.arrow.remove();	
+	}	
 }
 
 class Outflow extends BC
@@ -554,6 +621,11 @@ class Outflow extends BC
 			}
 
 		});
+	}
+	
+	remove()
+	{
+		this.rect.remove();	
 	}
 }
 
@@ -616,6 +688,12 @@ class BodyForce extends BC
 			}
 		});
 	}
+
+	remove()
+	{
+		this.rect.remove();	
+		this.arrow.remove();	
+	}
 }
 
 class RectangleSpawn extends BC
@@ -676,6 +754,12 @@ class RectangleSpawn extends BC
 	reset()
 	{
 		this.spent = false;
+	}	
+	
+	remove()
+	{
+		this.rect.remove();	
+		this.arrow.remove();	
 	}
 }
 
@@ -713,6 +797,11 @@ class Wall extends BC
 
 			this.line.wasChanged = false;
 		}		
+	}	
+
+	remove()
+	{
+		this.line.remove();	
 	}
 }
 
@@ -759,6 +848,11 @@ class RigidBodySpawn extends BC
 		});
 
 		this.spent = false;
+	}
+
+	remove()
+	{
+		this.line.remove();	
 	}
 }
 

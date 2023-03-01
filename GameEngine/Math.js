@@ -103,6 +103,63 @@ class Mat
 		return res;
 	}
 
+	add(A)
+	{
+		let res = new Mat(this.m, this.n);
+		for(let i = 0; i<this.m; i++)
+		{
+			for(let j = 0; j<this.n; j++)
+			{
+				res.set(i,j, this.get(i,j) + A.get(i,j));
+			}
+		}
+		return res;	
+	}
+
+	increment(i, j, f)
+	{
+		this.set(i, j, this.get(i, j) + f);
+	}
+
+	multiply(f)
+	{
+		let res = new Mat(this.m, this.n);
+		for(let i = 0; i<this.m; i++)
+		{
+			for(let j = 0; j<this.n; j++)
+			{
+				res.set(i,j, this.get(i,j)*f);
+			}
+		}
+		return res;	
+	}	
+
+	getMin()
+	{
+		let res = this.get(0,0);
+		for(let i = 0; i<this.m; i++)
+		{
+			for(let j = 0; j<this.n; j++)
+			{
+				res = Math.min(res, this.get(i,j));
+			}
+		}
+		return res;	
+	}
+
+	getMax()
+	{
+		let res = this.get(0,0);
+		for(let i = 0; i<this.m; i++)
+		{
+			for(let j = 0; j<this.n; j++)
+			{
+				res = Math.max(res, this.get(i,j));
+			}
+		}
+		return res;	
+	}
+
 	getTranspose()
 	{
 		let res = new Mat(this.n, this.m);

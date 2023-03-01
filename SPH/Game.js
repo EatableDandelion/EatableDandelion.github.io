@@ -22,15 +22,15 @@ window.addEventListener('load', function(){
 			this.particles.update(dt);
 		}
 
-		draw(context)
+		draw(context, paused)
 		{
 			this.UI.draw(context);
-			this.particles.draw(context);
+			this.particles.draw(context, paused);
 		}
 	}
 
 	let game = new Game(canvas.width, canvas.height, ctx, canvas);
-	let h = document.getElementById("slider-radius").value;
+	let h = parseInt(document.getElementById("slider-radius").value);
 	let color = document.getElementById("color-picker").value;
 	ctx.lineWidth = 5;
 	let dtFactor = 1;
@@ -45,7 +45,7 @@ window.addEventListener('load', function(){
 		lastTime = timeStamp;
 
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
-		game.draw(ctx);
+		game.draw(ctx, game.paused);
 		if(!game.paused)
 		{
 			game.update(dtFactor * deltaTime);
@@ -76,6 +76,11 @@ window.addEventListener('load', function(){
 		{
 			game.paused = false;
 			game.UI.visible = false;
+			game.particles.particleVisible = true;
+			game.particles.resultDisplay = "pressure";
+			document.getElementById("ui-checkbox").checked = false;
+			document.getElementById("particles-checkbox").checked = true;
+			document.getElementById("result-checkbox").checked = true;
 		});	
 
 		document.getElementById("stop-button")
@@ -83,6 +88,11 @@ window.addEventListener('load', function(){
 		{
 			game.paused = true;	
 			game.UI.visible = true;
+			game.particles.particleVisible =  false;
+			game.particles.resultDisplay = "";
+			document.getElementById("ui-checkbox").checked = true;
+			document.getElementById("particles-checkbox").checked = false;
+			document.getElementById("result-checkbox").checked = false;
 		});	
 
 		document.getElementById("reset-button")
@@ -98,7 +108,42 @@ window.addEventListener('load', function(){
 			game.UI.visible = 
 					document.getElementById("ui-checkbox").checked;
 		});
+		
+		document.getElementById("particles-checkbox")
+				.addEventListener("change", function()
+		{
+			game.particles.particleVisible = 
+					document.getElementById("particles-checkbox").checked;
+		});
 	
+		document.getElementById("result-checkbox")
+				.addEventListener("change", function()
+		{
+			if(document.getElementById("result-checkbox").checked)
+			{
+				game.particles.resultDisplay = document.getElementById
+											  ("result-dropdown").value;
+			}
+			else
+			{
+				game.particles.resultDisplay = "";
+			}
+		});
+		document.getElementById("result-dropdown")
+				.addEventListener("click", function()
+		{
+			if(document.getElementById("result-checkbox").checked)
+			{
+				game.particles.resultDisplay = document.getElementById
+											  ("result-dropdown").value;
+			}
+			else
+			{
+				game.particles.resultDisplay = "";
+			}
+		});
+
+
 
 	
 		document.getElementById("dt-slider").innerHTML = dtFactor;
@@ -150,9 +195,9 @@ window.addEventListener('load', function(){
 		document.getElementById("slider-sgravity")
 				.addEventListener("change", function()
 		{
-			game.particles
-				.setSelfGravity(document.getElementById("slider-sgravity")
-									.value);
+			game.particles.setSelfGravity(
+				parseInt(document.getElementById("slider-sgravity")
+									.value));
 			document.getElementById("label-sgravity").innerHTML = 
 					document.getElementById("slider-sgravity").value;
 		});
@@ -173,11 +218,24 @@ window.addEventListener('load', function(){
 				.addEventListener("change", function()
 		{
 			game.particles
-				.setViscosity(document.getElementById("slider-viscosity")
-									.value);
+				.setViscosity(
+				parseInt(document.getElementById("slider-viscosity")
+									.value));
 			document.getElementById("label-viscosity").innerHTML = 
 					document.getElementById("slider-viscosity").value;
 		});
+
+		document.getElementById("slider-cs")
+				.addEventListener("change", function()
+		{
+			game.particles
+				.setSpeedOfSound(
+				parseInt(document.getElementById("slider-cs").value));
+
+			document.getElementById("label-cs").innerHTML = 
+					document.getElementById("slider-cs").value;
+		});
+
 
 
 
@@ -187,7 +245,7 @@ window.addEventListener('load', function(){
 		document.getElementById("inflow-button")
 				.addEventListener("click", function()
 		{
-			game.particles.addBC(new Inflow(h, 2,0.1,
+			game.particles.addBC(new Inflow(h,
 								canvas.width*0.5, canvas.height*0.45,
 								canvas.width*0.5, canvas.height*0.65, 
 								game.UI, color));
@@ -243,15 +301,46 @@ window.addEventListener('load', function(){
 		document.getElementById("slider-radius")
 				.addEventListener("change", function()
 		{
-			h = document.getElementById("slider-radius").value;
+			h = parseInt(document.getElementById("slider-radius").value);
 			document.getElementById("radius-label").innerHTML = h;
+
+			bc = getSelectedElement();
+			if(bc != undefined)
+			{
+				if(bc.h != undefined)
+					bc.h = h;
+			}
 		});
 
 		document.getElementById("color-picker")
 				.addEventListener("change", function()
 		{
 			color = document.getElementById("color-picker").value;
+			bc = getSelectedElement();
+			if(bc != undefined)
+			{
+				if(bc.color != undefined)
+					bc.color = color;
+			}
 		});
+
+		document.getElementById("delete-button")
+				.addEventListener("click", function()
+		{
+			bc = getSelectedElement();
+			if(bc != undefined)
+			{
+				bc.remove();	
+				let e = document.getElementById("component-dropdown");
+				e.remove(e.selectedIndex);
+			}
+		});
+	}
+
+	function getSelectedElement()
+	{
+		let bc = document.getElementById("component-dropdown").value;
+		return game.particles.getBC(parseInt(bc));
 	}
 
 	function addToBCDropDown(name)

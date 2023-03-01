@@ -36,6 +36,12 @@ button:hover
 	margin-top:				20%;
 }
 
+.checkbox-top
+{
+	position:				relative;
+	height:					20px;
+	margin-top:				0%;
+}
 
 
 .dragnode
@@ -77,7 +83,7 @@ button:hover
 .left-panel
 {
 	display:				grid;
-	grid-template-rows:		200px 320px 100px 100px;
+	grid-template-rows:		300px 320px 100px 100px;
 }
 
 .add-elements-div
@@ -93,7 +99,7 @@ button:hover
 {
 	display:				grid;
 	grid-template-columns:	1fr 4fr;
-	height:					50px;
+	height:					70px;
 }
 
 .select-panel
@@ -107,9 +113,16 @@ button:hover
 .top-div
 {
 	display:				grid;
-	grid-template-columns:	150px 150px 150px 1fr 100px 100px;
+	grid-template-columns:	150px 150px 150px 170px 300px 100px;
 	column-gap:				5px;
-	width:					900px;
+	width:					1200px;
+	height:					80px;
+}
+
+.visibility-panel
+{
+	display:				grid;
+	grid-template-columns:	1fr 2fr;
 }
 
 .edit-panel
@@ -129,7 +142,7 @@ button:hover
 {
 	border: 				5px solid black;
 	position: 				relative;
-	top: 					50%;
+	top: 					48%;
 	left: 					50%;
 	transform: 				translate(-50%, -50%);
 	background: 			transparent;
