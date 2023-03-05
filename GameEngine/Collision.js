@@ -232,3 +232,26 @@ class OBBCollider extends Collider
 		return true;
 	}
 }
+
+class BezierCollider extends Collider
+{
+	constructor(nodes)
+	{
+		super("bezier");
+	}
+
+	intersectSegment(segment, contacts)
+	{
+
+	}
+
+	//Solve roots of a.x^2 + b.x + c = 0;
+	solveQuadratic(a, b, c)
+	{
+		let delta = b*b - 4*a*c;
+		if(delta < 0) return {};
+		if(delta == 0) return {x0:-b/(2*a)};
+		return {x0:(-b-Math.sqrt(delta))/(2*a),
+				x1:(-b+Math.sqrt(delta))/(2*a)};
+	}
+}

@@ -3,17 +3,47 @@ window.addEventListener('load', function(){
 	const ctx = canvas.getContext('2d');
 	canvas.width = 1400;
 	canvas.height = 1000;
-	
+
+
+	class Parameters
+	{	
+		constructor()
+		{
+			this.Fr = 0.5;
+			this.Re = 100;
+			this.density = 1;
+			this.M = 0.1;
+			this.CFL = 0.5;
+
+			this.L = canvas.width/2;
+			this.dt0 = 16.67;
+			this.h0 = 20;
+			this.rho0 = 1;
+//			this.m0 = 2*Math.PI*this.h0*this.h0*this.rho0;
+			this.reset();
+		}
+
+		reset()
+		{
+			this.u0 = this.h0*this.CFL/this.dt0;
+			this.g = this.u0*this.u0/(this.L*this.Fr*this.Fr);
+			this.k = this.rho0*this.u0*this.u0/(this.M*this.M);
+			this.mu = this.L*this.CFL*this.h0/(this.dt0*this.Re*this.rho0);
+		}
+	}
 
 	class Game
 	{
 		constructor(width, height, context, element)
 		{
+			this.parameters = new Parameters();
 			this.paused = true;
 			this.width = width;
 			this.height = height;
 			this.UI =  new UI(width, height, element);
-			this.particles = new ParticleSystem(width, height);
+			this.particles = new ParticleSystem(width, height, 
+												this.UI.mouse,
+												this.parameters);
 		}
 
 		update(dt)
@@ -22,18 +52,23 @@ window.addEventListener('load', function(){
 			this.particles.update(dt);
 		}
 
-		draw(context, paused)
+		draw(context, minValue, maxValue) 
 		{
 			this.UI.draw(context);
-			this.particles.draw(context, paused);
+			this.particles.draw(context, minValue, maxValue);
 		}
 	}
 
 	let game = new Game(canvas.width, canvas.height, ctx, canvas);
 	let h = parseInt(document.getElementById("slider-radius").value);
 	let color = document.getElementById("color-picker").value;
-	ctx.lineWidth = 5;
 	let dtFactor = 1;
+	let minValue = 0;
+	let maxValue = 1;
+
+	ctx.lineWidth = 5;
+	document.getElementById("dt-slider").innerHTML = dtFactor;
+	document.getElementById("dt-label").innerHTML = dtFactor;
 
 	initUI();
 
@@ -45,7 +80,7 @@ window.addEventListener('load', function(){
 		lastTime = timeStamp;
 
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
-		game.draw(ctx, game.paused);
+		game.draw(ctx, minValue, maxValue);
 		if(!game.paused)
 		{
 			game.update(dtFactor * deltaTime);
@@ -142,16 +177,31 @@ window.addEventListener('load', function(){
 				game.particles.resultDisplay = "";
 			}
 		});
+		document.getElementById("min-val")
+				.addEventListener("input", function()
+		{
+			minValue = document.getElementById("min-val").value;	
+		});
+		document.getElementById("max-val")
+				.addEventListener("input", function()
+		{
+			maxValue = document.getElementById("max-val").value;	
+		});
 
-
-
-	
-		document.getElementById("dt-slider").innerHTML = dtFactor;
-		document.getElementById("dt-label").innerHTML = dtFactor;
 		document.getElementById("dt-slider")
 				.addEventListener("change", function()
 		{
-			dtFactor = document.getElementById("dt-slider").value;
+			dtFactor = 
+				parseFloat(document.getElementById("dt-slider").value)
+ 			  +parseFloat(document.getElementById("dt-slider-micro").value);
+			document.getElementById("dt-label").innerHTML = dtFactor;
+		});
+		document.getElementById("dt-slider-micro")
+				.addEventListener("change", function()
+		{
+			dtFactor = 
+				parseFloat(document.getElementById("dt-slider").value)
+ 			  +parseFloat(document.getElementById("dt-slider-micro").value);
 			document.getElementById("dt-label").innerHTML = dtFactor;
 		});
 
@@ -171,11 +221,19 @@ window.addEventListener('load', function(){
 		document.getElementById("slider-gravity")
 				.addEventListener("change", function()
 		{
-			game.particles
-				.setGravity(document.getElementById("slider-gravity")
-									.value);
+//			game.particles
+//				.setGravity(document.getElementById("slider-gravity")
+//									.value);
+
+	
+			game.parameters.Fr = 
+			parseFloat(document.getElementById("slider-gravity").value);
+
+			game.parameters.reset();
+	
+
 			document.getElementById("label-gravity").innerHTML = 
-					document.getElementById("slider-gravity").value;
+				parseFloat(document.getElementById("slider-gravity").value);
 		});
 
 
@@ -217,10 +275,15 @@ window.addEventListener('load', function(){
 		document.getElementById("slider-viscosity")
 				.addEventListener("change", function()
 		{
-			game.particles
-				.setViscosity(
-				parseInt(document.getElementById("slider-viscosity")
-									.value));
+//			game.particles
+//				.setViscosity(
+//				parseInt(document.getElementById("slider-viscosity")
+//									.value));
+
+			game.parameters.Re = 
+			parseInt(document.getElementById("slider-viscosity").value);
+
+			game.parameters.reset();
 			document.getElementById("label-viscosity").innerHTML = 
 					document.getElementById("slider-viscosity").value;
 		});
@@ -228,9 +291,14 @@ window.addEventListener('load', function(){
 		document.getElementById("slider-cs")
 				.addEventListener("change", function()
 		{
-			game.particles
-				.setSpeedOfSound(
-				parseInt(document.getElementById("slider-cs").value));
+//			game.particles
+//				.setSpeedOfSound(
+//				parseInt(document.getElementById("slider-cs").value));
+
+			game.parameters.M = 
+			parseFloat(document.getElementById("slider-cs").value);
+
+			game.parameters.reset();
 
 			document.getElementById("label-cs").innerHTML = 
 					document.getElementById("slider-cs").value;

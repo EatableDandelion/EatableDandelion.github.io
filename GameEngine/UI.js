@@ -93,7 +93,6 @@ class UI
 	}
 }
 
-
 class Interactable
 {
 	constructor(collider)
@@ -129,6 +128,33 @@ class Interactable
 
 	remove()
 	{};
+}
+
+class MouseLabel
+{
+	constructor(x, y, text)
+	{
+		this.x = x;
+		this.y = y;
+		this.offsetX = x;
+		this.offsetY = y;
+		this.text = text;
+	}
+
+	draw(context)
+	{
+		context.font = "30px serif";
+		context.fillStyle = "black"
+		context.fillText(this.text, this.x, this.y);
+	}
+
+	onMouseMove(mouse, e)
+	{
+		this.x = this.offsetX + mouse.x;
+		this.y = this.offsetY + mouse.y;
+		return false;
+	}
+
 }
 
 class Draggable extends Interactable

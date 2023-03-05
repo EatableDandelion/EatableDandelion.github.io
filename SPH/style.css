@@ -43,6 +43,10 @@ button:hover
 	margin-top:				0%;
 }
 
+.numberfield
+{
+	width:		90px;
+}
 
 .dragnode
 {

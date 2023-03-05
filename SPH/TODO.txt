@@ -1,0 +1,5 @@
+RK4
+Different handling of wall BC (find intersection and reflect velocity)
+temparature
+quadtree
+elasticity model: spring

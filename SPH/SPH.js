@@ -5,13 +5,18 @@ class Particle
 		this.x = x;
 		this.y = y;
 		this.h = h;
-		this.m = h*h/4000*m;
+		//this.m = h*h/4000*m;
+		this.m = m;
 		this.rho = 0;
 		this.P = 0;
 		this.vx = vx;
 		this.vy = vy;
+		this.vx_old = vx;
+		this.vy_old = vy;
 		this.fx = 0;
 		this.fy = 0;
+		this.T = 0;
+		this.e = 20;
 		this.id = 0;
 		this.markedForDeletion = false;
 		this.color = color;
@@ -20,15 +25,460 @@ class Particle
 		this.isGhost = isGhost;
 		this.offsetX = 0; //only used for rigid bodies
 		this.offsetY = 0; //only used for rigid bodies
+		this.viscousEnergy = 0;
+		this.pressureEnergy = 0;
+		this.wallFactor = 1;
+		this.test = 0;
 	}
 
-	draw(context)
+	draw(context, variableName, minValue, maxValue)
 	{
+		let lowColor  = [0,0,255];
+		let highColor = [255,0,0];
+
+		let value = this.P;
+		
+		if(variableName == "u")
+		{
+			value = this.u;
+		}
+		else if(variableName == "v")
+		{
+			value = this.v;
+		}
+		else if(variableName == "e")
+		{
+			value = this.e;
+		}
+		else if(variableName == "T")
+		{
+			value = this.T;
+		}
+		else if(variableName == "rho")
+		{
+			value = this.rho;
+		}
+		else if(variableName == "test")
+		{
+			value = this.test;
+		}
+
+
+		let alpha = value-minValue;
+		alpha /= (maxValue-minValue);
+		
+		let r = alpha*highColor[0]+(1-alpha)*lowColor[0];
+		let g = alpha*highColor[1]+(1-alpha)*lowColor[1];
+		let b = alpha*highColor[2]+(1-alpha)*lowColor[2];
+
+		context.fillStyle = "rgb("+r+","+g+","+b+")";
+
+
 		context.beginPath();
-		context.fillStyle = this.color;
-		context.arc(this.x, this.y, this.h*0.8, 0, 2*Math.PI);
+		context.arc(this.x, this.y, this.h*0.4, 0, 2*Math.PI);
 		context.fill();
+		context.strokeStyle = this.color;
+		context.beginPath();
+		context.arc(this.x, this.y, this.h*0.4, 0, 2*Math.PI);
+		context.stroke();
 		context.fillStyle = "black";
+	}
+}
+
+class ParticleSystem
+{
+	constructor(width, height, mouse, parameters)
+	{
+		this.particles = [];
+		this.rigidBodies = [];
+		this.width = width;
+		this.height = height;
+		this.gravityToggle = 0;
+		this.selfGravityToggle = 0;
+		this.viscosityToggle = 1;
+		this.cs = 0.6; //speed of sound
+		this.g = 0;
+		this.selfG = 0.12;
+		this.nbParticles = 0;
+		this.nu = 0.0;
+		this.bcs = [];
+		this.bcIds = 0;
+		this.alpha = 0;
+		this.beta = 2*this.alpha;
+		this.mu = 1;
+		this.grid = new Grid(30, 18, 0, 0, width, height, mouse);
+		this.particleVisible = false;
+		this.resultDisplay = "";
+		this.R = 0.001;
+		this.parameters = parameters;
+		this.parameters.m0 = this.parameters.rho0
+						   / this.W(0,this.parameters.h0);
+	}
+
+	update(dt)
+	{
+		this.particles = 
+			this.particles.filter(particle => !particle.markedForDeletion);
+
+		this.bcs = 
+			this.bcs.filter(bc => !bc.markedForDeletion);
+
+		this.bcs.forEach(bc =>
+		{
+			bc.update(this, dt);
+		});
+
+
+		this.grid.clearGrid();
+		this.particles.forEach(particle => this.grid.add(particle));
+
+		this.particles.filter(particle => !particle.isGhost)
+					  .forEach(particle => 
+		{
+			particle.vx += 0.5*dt * particle.fx;
+			particle.vy += 0.5*dt * particle.fy;
+			particle.x  += dt * particle.vx;
+			particle.y  += dt * particle.vy;
+
+			particle.fx = 0;
+			particle.fy = 0;
+		});
+
+
+		this.updateForce();
+
+		this.particles.filter(particle => particle.isGhost)
+					  .forEach(particle => 
+		{
+			this.enforceGhostBCs(particle, dt);
+		});
+
+		let E = 0;
+
+		this.particles.filter(particle => !particle.isGhost)
+					  .forEach(particle => 
+		{
+			particle.vx += 0.5*dt * particle.fx;
+			particle.vy += 0.5*dt * particle.fy;
+			particle.e  += dt * (particle.P/(particle.rho*particle.rho)
+								*particle.pressureEnergy
+								+0.5*particle.viscousEnergy);
+
+			particle.T = particle.e / (1.5 * this.R);
+
+			particle.pressureEnergy = 0;
+			particle.viscousEnergy = 0;
+
+			this.enforceBCs(particle, dt);		
+		});
+
+		this.rigidBodies.forEach(body => body.update(dt));
+	}
+
+	updateForce()
+	{
+		this.setDensity();
+
+		let n = this.particles.length;
+		for(let i = 0; i<n; i++)
+		{
+			let pi = this.particles[i];
+			let neighbors = this.grid.getNeighbors(pi);
+			pi.test = neighbors.length - 1;
+			for(let j = 0; j<neighbors.length; j++)
+			{
+				let pj = neighbors[j];
+				if(pj.id <= pi.id) continue;
+
+				let dx = pi.x - pj.x;
+				let dy = pi.y - pj.y;
+				let r = Math.sqrt(dx*dx + dy*dy);
+				dx /= r;
+				dy /= r;
+
+				let dW = this.dW(r,(pi.h+pj.h)*0.5);
+
+				let viscousStress = 0; 
+//						this.getArtificialViscosity(pi, pj, r, dx, dy);
+				if(this.viscosityToggle == 1)
+					viscousStress += this.getViscosity(pi, pj, r, dx, dy);
+
+				let stress = viscousStress
+						   + this.getPressureTerm(pi, pj);
+
+				stress *= dW*2/(pi.h+pj.h);
+
+				pi.fx += -pj.m * stress * dx;
+				pi.fy += -pj.m * stress * dy;
+				pj.fx -= -pi.m * stress * dx;
+				pj.fy -= -pi.m * stress * dy;
+				let v_dot_r = (pi.vx-pj.vx) * dx + (pi.vy-pj.vy) * dy;
+
+				pi.viscousEnergy += pj.m * viscousStress*v_dot_r*dW;
+				pi.pressureEnergy += pj.m * v_dot_r*dW;
+				pj.viscousEnergy += pi.m * viscousStress*v_dot_r*dW;
+				pj.pressureEnergy += pi.m * v_dot_r*dW;
+			}
+			pi.fy += this.parameters.g * this.gravityToggle;
+		}
+
+		if(this.selfGravityToggle == 1)
+		{
+			let g = this.parameters.g * this.parameters.rho0 
+					/ (this.parameters.h0*this.parameters.h0);
+			for(let i = 0; i<n; i++)
+			{
+				let pi = this.particles[i];
+	
+				for(let j = i+1; j<this.particles.length; j++)
+				{
+					let pj = this.particles[j];
+
+					let dx = pi.x - pj.x;
+					let dy = pi.y - pj.y;
+					let r = Math.sqrt(dx*dx + dy*dy);
+					dx /= r;
+					dy /= r;
+
+
+					pi.fx += -pj.m * g / (r*r) * dx;
+					pi.fy += -pj.m * g / (r*r) * dy;
+					pj.fx -= -pi.m * g / (r*r) * dx;
+					pj.fy -= -pi.m * g / (r*r) * dy;
+				}
+			}
+		}
+	}
+
+	setDensity()
+	{
+		let n = this.particles.length;
+		for(let i = 0; i<n; i++)
+		{
+			let pi = this.particles[i];
+			pi.rho = pi.m * this.W(0, pi.h);
+
+			let neighbors = this.grid.getNeighbors(pi);
+
+			for(let j = 0; j<neighbors.length; j++)
+			{
+				let pj = neighbors[j];
+				if(pj.id <= pi.id) continue;
+
+				let dx = pi.x - pj.x;
+				let dy = pi.y - pj.y;
+				let r = Math.sqrt(dx*dx + dy*dy);
+				let rho_ij = pj.m * this.W(r, (pi.h+pj.h)*0.5);
+				pi.rho += rho_ij;
+				pj.rho += rho_ij;			
+			}
+			//pi.P = (this.cs)*(this.cs)*pi.rho;
+//			pi.h = Math.min(80, Math.pow(pi.m/pi.rho,1/3));
+
+			let h0 = pi.h/Math.cbrt(pi.m/pi.rho);
+
+			let cs = this.parameters.u0 / this.parameters.M;
+			pi.P = pi.wallFactor*cs*cs*(pi.rho-this.parameters.rho0)*pi.T*this.R;
+//			pi.P = (this.cs)*(this.cs)*pi.rho*pi.T*this.R;
+		}
+	}
+
+	getPressureTerm(p1, p2)
+	{
+		return (p1.P+p2.P)/(p1.rho*p2.rho);
+	}
+
+	getArtificialViscosity(p1, p2, r, dx, dy)
+	{
+		let v_dot_r = (p1.vx-p2.vx) * dx + (p1.vy-p2.vy) * dy;
+		if(v_dot_r > 0) return 0;
+
+		let epsilon = 0.01;
+		let h = (p1.h + p2.h)*0.5;
+		let mu = h * v_dot_r;
+		mu /= r*r + epsilon*h*h;
+		let cs = (p1.P+p2.P)/(p1.rho+p2.rho);
+
+		return (-this.alpha*cs*mu + this.beta*mu*mu)*2.0/(p1.rho+p2.rho);
+	}
+
+	getViscosity(p1, p2, r, dx, dy)
+	{
+		let v_dot_r = (p1.vx-p2.vx) * dx + (p1.vy-p2.vy) * dy;
+
+		let d = 2; //number of dimensions;
+
+		let h = (p1.h + p2.h)*0.5;
+
+		//return -2*(d+2)*this.mu*v_dot_r/(p2.rho*(r*r+0.01*h*h));
+
+		let viscosity = -2*(d+2)*this.parameters.mu*v_dot_r/
+							(p2.rho*(r*r+0.01*h*h))
+
+		let temp = p1.wallFactor * p2.wallFactor;
+		temp *= temp;
+		temp *= temp;
+		temp *= temp;
+
+		return viscosity * temp;
+	}
+
+
+	W(r, h)
+	{
+		let x = r/h;
+		if(x < 1)
+		{
+			return (1.0 - 3.0*0.5*x*x + 3.0*0.25*x*x*x)/(Math.PI * h*h*h); 
+		}
+		else if(x < 2)
+		{
+			return 0.25*(2.0-x)*(2.0-x)*(2.0-x)/(Math.PI * h*h*h); 
+		}
+		return 0.0;
+	}
+
+	dW(r, h)
+	{
+		let x = r/h;
+		if(x < 1)
+		{
+			return (9.0*0.25*x*x - 3.0*x)/(Math.PI * h*h*h*h); 
+		}
+		else if(x < 2)
+		{
+			return (-3.0*0.25*(2.0-x)*(2.0-x))/(Math.PI * h*h*h*h); 
+		}
+		return 0.0;
+	}
+
+	enforceGhostBCs(particle, dt)
+	{
+		let restitution = 1.0;
+		
+		if(particle.x > this.width - particle.h)
+		{
+			particle.fx_old = 0;
+			particle.fx = Math.min(0,-2*particle.vx*restitution/dt);
+		}
+		else if(particle.x < particle.h)
+		{
+			particle.fx_old = 0;
+			particle.fx = Math.max(0,-2*particle.vx*restitution/dt);
+		}
+		if(particle.y > this.height - particle.h)
+		{
+			particle.fy_old = 0;
+			particle.fy = Math.min(0,-2*particle.vy*restitution/dt);
+		}
+		else if(particle.y < particle.h)
+		{
+			particle.fy_old = 0;
+			particle.fy = Math.max(0,-2*particle.vy*restitution/dt);
+		}
+	}
+
+
+	enforceBCs(particle, dt)
+	{
+		let restitution = 1.0;
+		
+		if(particle.x > this.width - particle.h)
+		{
+			particle.vx *= -restitution;
+			particle.x = 2*(this.width - particle.h) - particle.x;
+		}
+		else if(particle.x < particle.h)
+		{
+			particle.vx *= -restitution;
+			particle.x = -particle.x + 2*particle.h;
+		}
+		if(particle.y > this.height - particle.h)
+		{
+			particle.vy *= -restitution;
+			particle.y = 2*(this.height - particle.h) - particle.y;
+		}
+		else if(particle.y < particle.h)
+		{
+			particle.vy *= -restitution;
+			particle.y = -particle.y + 2*particle.h;
+		}
+	}
+
+	addParticle(x, y, r, m, vx, vy, color, isGhost)
+	{
+		let particle = new Particle(x, y, r, m*this.parameters.m0, 
+									vx, vy, color, isGhost);
+		particle.id = this.nbParticles++;
+		if(isGhost) particle.wallFactor = 2;
+		this.particles.push(particle);
+		return particle;
+	}
+
+	draw(context, minValue, maxValue)
+	{
+		if(this.resultDisplay != "")
+			this.grid.draw(context, this.resultDisplay, minValue, maxValue);
+
+		if(this.particleVisible)
+		{
+			this.particles.forEach(particle =>
+			{
+				particle.draw(context, this.resultDisplay, 
+							  minValue, maxValue);
+			});
+		}
+	}
+	
+	addBC(bc)
+	{
+		bc.id = this.bcIds++;
+		this.bcs.push(bc);
+	}
+
+	getBC(id)
+	{
+		return this.bcs.filter(bc => bc.id == id)[0];
+	}
+
+	reset()
+	{
+		this.grid.reset();
+
+		this.particles = this.particles
+							 .filter(particle => particle.isGhost);
+
+		this.bcs.forEach(bc =>
+		{
+			bc.reset();
+		});
+	}
+
+	getNumberOfParticles()
+	{
+		return this.particles.length;
+	}
+
+	setGravity(Fr)
+	{
+//		this.g = g*0.000002;
+		this.g = this.parameters.u0*this.parameters.u0/(L*Fr*Fr);
+
+	}
+
+	setSelfGravity(g)
+	{
+		this.selfG = g * 0.02;
+	}
+
+	setViscosity(mu)
+	{
+		this.mu = mu;
+	}
+
+	setSpeedOfSound(cs)
+	{
+		this.cs = cs;
 	}
 }
 
@@ -139,368 +589,6 @@ class RigidBody
 	}
 }
 
-class ParticleSystem
-{
-	constructor(width, height)
-	{
-		this.particles = [];
-		this.rigidBodies = [];
-		this.width = width;
-		this.height = height;
-		this.gravityToggle = 0;
-		this.selfGravityToggle = 0;
-		this.viscosityToggle = 1;
-		this.cs = 0.2; //speed of sound
-		this.g = 0;
-		this.selfG = 1.2;
-		this.nbParticles = 0;
-		this.nu = 0.0;
-		this.bcs = [];
-		this.bcIds = 0;
-		this.alpha = 10;
-		this.beta = 2*this.alpha;
-		this.mu = 1;
-		this.grid = new Grid(30, 18, 0, 0, width, height);
-		this.particleVisible = false;
-		this.resultDisplay = "";
-	}
-
-	update(dt)
-	{
-		this.particles = 
-			this.particles.filter(particle => !particle.markedForDeletion);
-
-		this.bcs = 
-			this.bcs.filter(bc => !bc.markedForDeletion);
-
-		this.bcs.forEach(bc =>
-		{
-			bc.update(this, dt);
-		});
-
-
-		this.grid.clearGrid();
-		this.particles.forEach(particle => this.grid.add(particle));
-
-		this.setDensity();
-
-		let n = this.particles.length;
-		for(let i = 0; i<n; i++)
-		{
-			let pi = this.particles[i];
-			let neighbors = this.grid.getNeighbors(pi);
-
-			for(let j = 0; j<neighbors.length; j++)
-			{
-				let pj = neighbors[j];
-				if(pj.id <= pi.id) continue;
-
-				let dx = pi.x - pj.x;
-				let dy = pi.y - pj.y;
-				let r = Math.sqrt(dx*dx + dy*dy);
-				dx /= r;
-				dy /= r;
-
-				let dW = this.dW(r,(pi.h+pj.h)*0.5);
-
-				let stress = this.getPressureTerm(pi, pj)
-						   + this.getArtificialViscosity(pi, pj, r, dx, dy);
-
-				if(this.viscosityToggle == 1)
-					stress += this.getViscosity(pi, pj, r, dx, dy);
-
-				stress *= dW;
-
-				pi.fx += -pj.m * stress * dx;
-				pi.fy += -pj.m * stress * dy;
-				pj.fx -= -pi.m * stress * dx;
-				pj.fy -= -pi.m * stress * dy;
-
-				pi.fy += this.g * this.gravityToggle;
-				pj.fy += this.g * this.gravityToggle;
-
-			}
-		}
-
-		if(this.selfGravityToggle == 1)
-		{
-			for(let i = 0; i<n; i++)
-			{
-				let pi = this.particles[i];
-	
-				for(let j = i+1; j<this.particles.length; j++)
-				{
-					let pj = this.particles[j];
-
-					let dx = pi.x - pj.x;
-					let dy = pi.y - pj.y;
-					let r = Math.sqrt(dx*dx + dy*dy);
-					dx /= r;
-					dy /= r;
-
-					pi.fx += -pj.m * this.selfG / (r*r) * dx;
-					pi.fy += -pj.m * this.selfG / (r*r) * dy;
-					pj.fx -= -pi.m * this.selfG / (r*r) * dx;
-					pj.fy -= -pi.m * this.selfG / (r*r) * dy;
-				}
-			}
-		}
-
-
-		this.particles.filter(particle => particle.isGhost)
-					  .forEach(particle => 
-		{
-			this.enforceGhostBCs(particle, dt);
-		});
-
-		let E = 0;
-		this.particles.filter(particle => !particle.isGhost)
-					  .forEach(particle => 
-		{
-			particle.vx += dt*(particle.fx+particle.fx_old)*0.5;
-			particle.vy += dt*(particle.fy+particle.fy_old)*0.5;
-
-			particle.vx = Math.min(Math.max(-2, particle.vx),2);
-			particle.vy = Math.min(Math.max(-2, particle.vy),2);
-
-			particle.x += dt*particle.vx + 0.5*particle.fx*dt*dt;
-			particle.y += dt*particle.vy + 0.5*particle.fy*dt*dt;
-
-			particle.fx_old = particle.fx;	
-			particle.fy_old = particle.fy;	
-
-			particle.fx = 0;
-			particle.fy = 0;
-
-
-			E += 0.5*(particle.vx*particle.vx+particle.vy*particle.vy);
-
-			this.enforceBCs(particle, dt);		
-
-
-		});
-
-
-		this.rigidBodies.forEach(body => body.update(dt));
-
-
-		//console.log(E);
-	}
-
-
-	setDensity()
-	{
-		let n = this.particles.length;
-		for(let i = 0; i<n; i++)
-		{
-			let pi = this.particles[i];
-			pi.rho = pi.m * this.W(0, pi.h);
-
-			let neighbors = this.grid.getNeighbors(pi);
-
-			for(let j = 0; j<neighbors.length; j++)
-			{
-				let pj = neighbors[j];
-				if(pj.id <= pi.id) continue;
-
-				let dx = pi.x - pj.x;
-				let dy = pi.y - pj.y;
-				let r = Math.sqrt(dx*dx + dy*dy);
-				dx /= r;
-				dy /= r;
-				let rho_ij = pj.m * this.W(r, (pi.h+pj.h)*0.5);
-				pi.rho += rho_ij;
-				pj.rho += rho_ij;			
-			}
-			pi.P = (this.cs)*(this.cs)*(pi.rho);
-		}
-	}
-
-	getPressureTerm(p1, p2)
-	{
-		return (p1.P+p2.P)/(p1.rho*p2.rho);
-	}
-
-	getArtificialViscosity(p1, p2, r, dx, dy)
-	{
-		let v_dot_r = (p1.vx-p2.vx) * dx + (p1.vy-p2.vy) * dy;
-		if(v_dot_r > 0) return 0;
-
-		let epsilon = 0.01;
-		let h = (p1.h + p2.h)*0.5;
-		let mu = h * v_dot_r;
-		mu /= r*r + epsilon*h*h;
-		let cs = (p1.P+p2.P)/(p1.rho+p2.rho);
-
-		return (-this.alpha*cs*mu + this.beta*mu*mu)*2.0/(p1.rho+p2.rho);
-	}
-
-	getViscosity(p1, p2, r, dx, dy)
-	{
-		let v_dot_r = (p1.vx-p2.vx) * dx + (p1.vy-p2.vy) * dy;
-
-		let d = 2; //number of dimensions;
-
-		let epsilon = 0.01;
-		let h = (p1.h + p2.h)*0.5;
-
-		return -2*(d+2)*this.mu*v_dot_r/(p2.rho*(r*r+0.01*h*h));
-	}
-
-
-	W(r, h)
-	{
-		let x = r/h;
-		if(x < 1)
-		{
-			return (1.0 - 3.0*0.5*x*x + 3.0*0.25*x*x*x)/(Math.PI * h*h*h); 
-		}
-		else if(x < 2)
-		{
-			return 0.25*(2.0-x)*(2.0-x)*(2.0-x)/(Math.PI * h*h*h); 
-		}
-		return 0.0;
-	}
-
-	dW(r, h)
-	{
-		let x = r/h;
-		if(x < 1)
-		{
-			return (9.0*0.25*x*x - 3.0*x)/(Math.PI * h*h*h*h); 
-		}
-		else if(x < 2)
-		{
-			return (-3.0*0.25*(2.0-x)*(2.0-x))/(Math.PI * h*h*h*h); 
-		}
-		return 0.0;
-	}
-
-	enforceGhostBCs(particle, dt)
-	{
-		let restitution = 1.0;
-		
-		if(particle.x > this.width - particle.h)
-		{
-			particle.fx_old = 0;
-			particle.fx = Math.min(0,-2*particle.vx*restitution/dt);
-		}
-		else if(particle.x < particle.h)
-		{
-			particle.fx_old = 0;
-			particle.fx = Math.max(0,-2*particle.vx*restitution/dt);
-		}
-		if(particle.y > this.height - particle.h)
-		{
-			particle.fy_old = 0;
-			particle.fy = Math.min(0,-2*particle.vy*restitution/dt);
-		}
-		else if(particle.y < particle.h)
-		{
-			particle.fy_old = 0;
-			particle.fy = Math.max(0,-2*particle.vy*restitution/dt);
-		}
-	}
-
-
-	enforceBCs(particle, dt)
-	{
-		let restitution = 1.0;
-		
-		if(particle.x > this.width - particle.h)
-		{
-			particle.vx *= -restitution;
-			particle.x = 2*(this.width - particle.h) - particle.x;
-		}
-		else if(particle.x < particle.h)
-		{
-			particle.vx *= -restitution;
-			particle.x = -particle.x + 2*particle.h;
-		}
-		if(particle.y > this.height - particle.h)
-		{
-			particle.vy *= -restitution;
-			particle.y = 2*(this.height - particle.h) - particle.y;
-		}
-		else if(particle.y < particle.h)
-		{
-			particle.vy *= -restitution;
-			particle.y = -particle.y + 2*particle.h;
-		}
-	}
-
-	addParticle(x, y, r, m, vx, vy, color, isGhost)
-	{
-		let particle = new Particle(x, y, r, m, vx, vy, color, isGhost);
-		particle.id = this.nbParticles++;
-		this.particles.push(particle);
-		return particle;
-	}
-
-	draw(context, paused)
-	{
-		if(this.resultDisplay != "")
-			this.grid.draw(context, this.resultDisplay);
-
-		if(this.particleVisible)
-		{
-			this.particles.forEach(particle =>
-			{
-				particle.draw(context);
-			});
-		}
-	
-	}
-	
-	addBC(bc)
-	{
-		bc.id = this.bcIds++;
-		this.bcs.push(bc);
-	}
-
-	getBC(id)
-	{
-		return this.bcs.filter(bc => bc.id == id)[0];
-	}
-
-	reset()
-	{
-		this.grid.reset();
-
-		this.particles = this.particles
-							 .filter(particle => particle.isGhost);
-
-		this.bcs.forEach(bc =>
-		{
-			bc.reset();
-		});
-	}
-
-	getNumberOfParticles()
-	{
-		return this.particles.length;
-	}
-
-	setGravity(g)
-	{
-		this.g = g*0.00002;
-	}
-
-	setSelfGravity(g)
-	{
-		this.selfG = g;
-	}
-
-	setViscosity(mu)
-	{
-		this.mu = mu;
-	}
-
-	setSpeedOfSound(cs)
-	{
-		this.cs = cs;
-	}
-}
 
 
 class BC
@@ -563,6 +651,11 @@ class Inflow extends BC
 			let l = 2 * (Math.random() - 0.5) * this.rect.width;
 			let x = this.center.x + l*Math.cos(this.rect.theta);
 			let y = this.center.y + l*Math.sin(this.rect.theta);
+	
+			if(x > canvas.width) continue;
+			if(x < 0) continue;
+			if(y > canvas.height) continue;
+			if(y < 0) continue;
 
 			particles.addParticle(x, y,this.h, 1, u, v, this.pColor, false);	
 		}
@@ -774,6 +867,13 @@ class Wall extends BC
 		this.h = h;
 		this.particles = [];
 		this.first = true;
+
+		//Start test
+		this.collider = new SegmentCollider(new Vector(0,0), 
+											new Vector(0,0));
+		this.partCollider = new SphereCollider(new Vector(0,0), 
+												new Vector(0,0));
+		//End test
 	}
 
 	update(particles, dt)
@@ -796,8 +896,9 @@ class Wall extends BC
 			});
 
 			this.line.wasChanged = false;
-		}		
+		}
 	}	
+
 
 	remove()
 	{

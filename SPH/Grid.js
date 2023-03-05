@@ -9,16 +9,21 @@ class Cell
 
 class Grid
 {
-	constructor(m, n, xMin, yMin, xMax, yMax)
+	constructor(m, n, xMin, yMin, xMax, yMax, mouse)
 	{
 		this.m = m;
 		this.n = n;
 		this.u = new Mat(this.m-1, this.n-1);
 		this.v = new Mat(this.m-1, this.n-1);
 		this.P = new Mat(this.m-1, this.n-1);
+		this.e = new Mat(this.m-1, this.n-1);
+		this.T = new Mat(this.m-1, this.n-1);
+		this.rho = new Mat(this.m-1, this.n-1);
+		this.test = new Mat(this.m-1, this.n-1);
 		this.counter = new Mat(this.m-1, this.n-1);
 		this.cellWidth  = (xMax - xMin)/(this.m - 1);
 		this.cellHeight = (yMax - yMin)/(this.n - 1);
+		this.mouse = mouse;
 
 		this.x = [];
 		this.y = [];
@@ -76,7 +81,7 @@ class Grid
 		return neighbors;
 	}
 
-	draw(context, variableName)
+	draw(context, variableName, min, max)
 	{
 		let variable = this.P;
 		let drawVelocity = false;
@@ -89,14 +94,31 @@ class Grid
 		{
 			variable = this.v;
 		}
+		else if(variableName == "e")
+		{
+			variable = this.e;
+		}
+		else if(variableName == "T")
+		{
+			variable = this.T;
+		}
 		else if(variableName == "vector")
 		{
 			drawVelocity = true;
 		}
+		else if(variableName == "rho")
+		{
+			variable = this.rho;
+		}
+		else if(variableName == "test")
+		{
+			variable = this.test;
+		}
 
 
-		let minP = Number.MAX_VALUE;
-		let maxP =-Number.MAX_VALUE;
+
+		let minP = min;
+		let maxP = max;
 		let maxU = 0;
 
 
@@ -106,15 +128,7 @@ class Grid
 			{
 				if(this.counter.get(i,j) == 0) continue;
 
-				let value = variable.get(i,j)/this.counter.get(i,j);
-
-				if(!isNaN(value))
-				{
-					minP = Math.min(value, minP);
-					maxP = Math.max(value, maxP);
-				}
-
-				value = this.u.get(i,j)/this.counter.get(i,j)
+				let value = this.u.get(i,j)/this.counter.get(i,j)
 					  * this.u.get(i,j)/this.counter.get(i,j)
 					  +	this.v.get(i,j)/this.counter.get(i,j)
 					  *	this.v.get(i,j)/this.counter.get(i,j);
@@ -127,7 +141,6 @@ class Grid
 		}
 
 		maxU = Math.sqrt(maxU);
-		if(minP == maxP) return;
 
 		for(let i = 0; i<this.m; i++)
 		{
@@ -152,37 +165,64 @@ class Grid
 				if(drawVelocity)
 				{
 					value = this.u.get(i,j)/this.counter.get(i,j);
-					let u0 = value/maxU*100;
+					let u0 = value/maxU*this.cellWidth/2;
 					value = this.v.get(i,j)/this.counter.get(i,j);
-					let v0 = value/maxU*100;
+					let v0 = value/maxU*this.cellWidth/2;
 
 					this.drawArrow(context, this.x[i], this.y[j], u0, v0);
 				}
 			}
 		}
+
+		let i = this.getI(this.mouse.x);
+		let j = this.getJ(this.mouse.y);
+
+		if(this.getCell(i,j) != undefined)
+		{
+			if(this.counter.get(i,j) > 0)
+			{
+				document.getElementById("current-val").innerHTML = 
+				(variable.get(i,j)/this.counter.get(i,j)).toExponential(3);
+			}
+		}
+	}
+
+	getI(x)
+	{
+		let xMin = this.x[0];
+		let xMax = this.x[this.m-2];
+
+		return Math.round((this.m-1)*(x-xMin)/(xMax-xMin)-0.5);
+	}
+
+	getJ(y)
+	{
+		let yMin = this.y[0];
+		let yMax = this.y[this.n-2];
+
+		return Math.round((this.n-1)*(y-yMin)/(yMax-yMin)-0.5);
 	}
 
 	add(particle)
 	{
-		let x = particle.x;
-		let y = particle.y;
-
-		let xMin = this.x[0];
-		let yMin = this.y[0];
-		let xMax = this.x[this.m-2];
-		let yMax = this.y[this.n-2];
-
-		let i = Math.round((this.m-1)*(x-xMin)/(xMax-xMin)-0.5);
-		let j = Math.round((this.n-1)*(y-yMin)/(yMax-yMin)-0.5);
+		let i = this.getI(particle.x);
+		let j = this.getJ(particle.y);
 
 		this.u.increment(i, j, particle.vx);
 		this.v.increment(i, j, particle.vy);
 		this.P.increment(i, j, particle.P);
+		this.T.increment(i, j, particle.T);
+		this.rho.increment(i, j, particle.rho);
+		this.test.increment(i, j, particle.test);
+		this.e.increment(i, j, particle.e + 0.5 * (particle.vx*particle.vx
+											 + particle.vy*particle.vy));
 
 		this.counter.increment(i, j, 1);
 
 		i = Math.max(0, Math.min(this.m-2, i));
 		j = Math.max(0, Math.min(this.n-2, j));
+		
+		if(this.getCell(i,j) == undefined) return;
 		this.getCell(i,j).neighbors.push(particle);
 	}
 
@@ -209,6 +249,7 @@ class Grid
 	{
 		let theta = Math.atan2(v, u);
 		let l = Math.sqrt(u*u + v*v);
+		context.beginPath();
 		context.translate(x, y);
 		context.rotate(theta);
 		context.moveTo(0, 0);
