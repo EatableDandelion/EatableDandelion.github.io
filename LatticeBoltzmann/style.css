@@ -1,0 +1,37 @@
+*{
+	margin: 				0;
+	padding: 				0;
+	box-sizing: 			border-box;
+}
+
+
+button
+{
+	color: 					rgb(58,123,238);
+	background-color: 		white;
+	border-color:			rgb(58,123,238);
+	border-radius:			10px;
+	border-style:			solid;
+	border-width:			3px;
+	font-weight:			bold;
+	cursor:					pointer;
+	transition:				background-color 0.2s;
+}
+
+button:hover
+{
+	color:					white;
+	background-color: 		rgb(50,123,238);
+	box-shadow:				3px 3px 5px black;
+}
+
+#canvas{
+	border: 5px solid black;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	background: transparent;
+	max-width: 100%;
+	max-height: 100%;
+}
