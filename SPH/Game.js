@@ -44,6 +44,9 @@ window.addEventListener('load', function(){
 			this.particles = new ParticleSystem(width, height, 
 												this.UI.mouse,
 												this.parameters);
+
+			let x = width/2;
+			let y = height/2;
 		}
 
 		update(dt)
@@ -73,6 +76,7 @@ window.addEventListener('load', function(){
 	initUI();
 
 
+
 	let lastTime = 0;
 
 	function animate(timeStamp){
@@ -83,7 +87,7 @@ window.addEventListener('load', function(){
 		game.draw(ctx, minValue, maxValue);
 		if(!game.paused)
 		{
-			game.update(dtFactor * deltaTime);
+			game.update(dtFactor * 9);
 		}
 
 		document.getElementById("particle-count").innerHTML = 

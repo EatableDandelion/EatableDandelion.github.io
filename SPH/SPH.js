@@ -29,6 +29,12 @@ class Particle
 		this.pressureEnergy = 0;
 		this.wallFactor = 1;
 		this.test = 0;
+		this.sigma_xx = 0;
+		this.sigma_xy = 0;
+		this.sigma_yy = 0;
+		this.eps_xx = 0;
+		this.eps_xy = 0;
+		this.eps_yy = 0;
 	}
 
 	draw(context, variableName, minValue, maxValue)
@@ -96,9 +102,6 @@ class ParticleSystem
 		this.gravityToggle = 0;
 		this.selfGravityToggle = 0;
 		this.viscosityToggle = 1;
-		this.cs = 0.6; //speed of sound
-		this.g = 0;
-		this.selfG = 0.12;
 		this.nbParticles = 0;
 		this.nu = 0.0;
 		this.bcs = [];
@@ -128,14 +131,13 @@ class ParticleSystem
 			bc.update(this, dt);
 		});
 
-
 		this.grid.clearGrid();
 		this.particles.forEach(particle => this.grid.add(particle));
 
 		this.particles.filter(particle => !particle.isGhost)
 					  .forEach(particle => 
 		{
-			particle.vx += 0.5*dt * particle.fx;
+			particle.vx += 0.5*dt* particle.fx;
 			particle.vy += 0.5*dt * particle.fy;
 			particle.x  += dt * particle.vx;
 			particle.y  += dt * particle.vy;
@@ -154,10 +156,15 @@ class ParticleSystem
 		});
 
 		let E = 0;
+		
 
 		this.particles.filter(particle => !particle.isGhost)
 					  .forEach(particle => 
 		{
+			particle.sigma_xx = particle.eps_xx;
+			particle.sigma_xy = particle.eps_xy;
+			particle.sigma_yy = particle.eps_yy;
+
 			particle.vx += 0.5*dt * particle.fx;
 			particle.vy += 0.5*dt * particle.fy;
 			particle.e  += dt * (particle.P/(particle.rho*particle.rho)
@@ -171,7 +178,6 @@ class ParticleSystem
 
 			this.enforceBCs(particle, dt);		
 		});
-
 		this.rigidBodies.forEach(body => body.update(dt));
 	}
 
@@ -206,12 +212,29 @@ class ParticleSystem
 				let stress = viscousStress
 						   + this.getPressureTerm(pi, pj);
 
+
+
 				stress *= dW*2/(pi.h+pj.h);
+
 
 				pi.fx += -pj.m * stress * dx;
 				pi.fy += -pj.m * stress * dy;
 				pj.fx -= -pi.m * stress * dx;
 				pj.fy -= -pi.m * stress * dy;
+
+				let stress_x = ((pi.sigma_xx+pj.sigma_xx)*dx
+							 + (pi.sigma_xy+pj.sigma_xy)*dy)
+							 *2*dW/((pi.h+pj.h)*pi.rho*pj.rho);
+
+				let stress_y = ((pi.sigma_xy+pj.sigma_xy)*dx
+							 + (pi.sigma_yy+pj.sigma_yy)*dy)
+							 *2*dW/((pi.h+pj.h)*pi.rho*pj.rho);
+
+				pi.fx -= pj.m * stress_x;
+				pi.fy -= pj.m * stress_y;
+				pj.fx += pi.m * stress_x;
+				pj.fy += pi.m * stress_y;
+
 				let v_dot_r = (pi.vx-pj.vx) * dx + (pi.vy-pj.vy) * dy;
 
 				pi.viscousEnergy += pj.m * viscousStress*v_dot_r*dW;
@@ -220,6 +243,8 @@ class ParticleSystem
 				pj.pressureEnergy += pi.m * v_dot_r*dW;
 			}
 			pi.fy += this.parameters.g * this.gravityToggle;
+	
+			this.updateStrain(pi, neighbors);
 		}
 
 		if(this.selfGravityToggle == 1)
@@ -305,6 +330,7 @@ class ParticleSystem
 	getViscosity(p1, p2, r, dx, dy)
 	{
 		let v_dot_r = (p1.vx-p2.vx) * dx + (p1.vy-p2.vy) * dy;
+		if(v_dot_r > 0) return 0;
 
 		let d = 2; //number of dimensions;
 
@@ -323,6 +349,37 @@ class ParticleSystem
 		return viscosity * temp;
 	}
 
+	updateStrain(pi, neighbors)
+	{
+		let E = 500;
+
+		let dudx = 0;
+		let dudy = 0;
+		let dvdx = 0;
+		let dvdy = 0;
+
+		for(let j = 0; j<neighbors.length; j++)
+		{
+			let pj = neighbors[j];
+			if(pj.id == pi.id) continue;
+
+			let dx = pi.x - pj.x;
+			let dy = pi.y - pj.y;
+			let r = Math.sqrt(dx*dx + dy*dy);
+			dx /= r;
+			dy /= r;
+
+			let dW = this.dW(r,(pi.h+pj.h)*0.5);
+
+			dudx += (pi.vx-pj.vx)*dW*dx*pj.m/pj.rho;
+			dudy += (pi.vx-pj.vx)*dW*dy*pj.m/pj.rho;
+			dvdx += (pi.vy-pj.vy)*dW*dx*pj.m/pj.rho;
+			dvdy += (pi.vy-pj.vy)*dW*dy*pj.m/pj.rho;
+		}
+		pi.eps_xx = E*dudx;
+		pi.eps_xy = 0.5*E*(dudy+dvdx);
+		pi.eps_yy = E*dvdy;
+	}
 
 	W(r, h)
 	{
